@@ -9,10 +9,14 @@ import adminRoutes from "./routes/admin.route";
 import { publicApiLimiter } from "./middleware/rateLimit.middleware";
 
 const app = express();
+app.set("trust proxy", 1);
 
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: [
+      "http://localhost:5173",
+      "https://banking-app-project-omega.vercel.app",
+    ],
     credentials: true,
   }),
 );

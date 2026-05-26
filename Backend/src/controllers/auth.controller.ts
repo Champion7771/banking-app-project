@@ -2,29 +2,51 @@ import jwt from "jsonwebtoken";
 import AppError from "../utils/AppError";
 import catchAsync from "../utils/catchAsync";
 import { Request, Response } from "express";
-import { registerUserService, loginUserService, getProfileService } from "../services/auth.service";
-import { registerSchema, loginSchema } from "../utils/validators/auth.validator";
+
+import {
+  registerUserService,
+  loginUserService,
+  getProfileService,
+} from "../services/auth.service";
+
+import {
+  registerSchema,
+  loginSchema,
+} from "../utils/validators/auth.validator";
+
 import RefreshToken from "../models/refreshToken.model";
+
+/* =========================
+   COOKIE OPTIONS
+========================= */
+
+const cookieOptions = {
+  httpOnly: true,
+  secure: true,
+  sameSite: "none" as const,
+};
+
+/* =========================
+   REGISTER USER
+========================= */
 
 export const registerUser = catchAsync(async (req: Request, res: Response) => {
   const validatedData = registerSchema.parse(req.body);
+
   const result = await registerUserService(validatedData);
-  // STORES SHORT-LIVED ACCESS TOKEN
-  // Used for protected APIs
+
+  // ACCESS TOKEN COOKIE
   res.cookie("accessToken", result.accessToken, {
-    httpOnly: true,
-    secure: false,
-    sameSite: "lax",
-    maxAge: 15 * 60 * 1000, // after 15 minutes
+    ...cookieOptions,
+    maxAge: 15 * 60 * 1000,
   });
-  // STORES LONG-LIVED REFRESH TOKEN
-  // Used ONLY to generate new access tokens
+
+  // REFRESH TOKEN COOKIE
   res.cookie("refreshToken", result.refreshToken, {
-    httpOnly: true,
-    secure: false,
-    sameSite: "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000, // after 7 days
+    ...cookieOptions,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
   });
+
   res.status(201).json({
     success: true,
     message: "User registered",
@@ -32,23 +54,27 @@ export const registerUser = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+/* =========================
+   LOGIN USER
+========================= */
+
 export const loginUser = catchAsync(async (req: Request, res: Response) => {
   const validatedData = loginSchema.parse(req.body);
+
   const result = await loginUserService(validatedData);
+
   // ACCESS TOKEN COOKIE
   res.cookie("accessToken", result.accessToken, {
-    httpOnly: true,
-    secure: false,
-    sameSite: "lax",
-    maxAge: 15 * 60 * 1000, // after 15 minutes
+    ...cookieOptions,
+    maxAge: 15 * 60 * 1000,
   });
+
   // REFRESH TOKEN COOKIE
   res.cookie("refreshToken", result.refreshToken, {
-    httpOnly: true,
-    secure: false,
-    sameSite: "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000, // after 7 days
+    ...cookieOptions,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
   });
+
   res.status(200).json({
     success: true,
     message: "Login successful",
@@ -56,12 +82,18 @@ export const loginUser = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+/* =========================
+   REFRESH ACCESS TOKEN
+========================= */
+
 export const refreshAccessToken = catchAsync(
   async (req: Request, res: Response) => {
     const refreshToken = req.cookies.refreshToken;
+
     if (!refreshToken) {
       throw new AppError("Refresh token missing", 401);
     }
+
     const decoded = jwt.verify(
       refreshToken,
       process.env.REFRESH_TOKEN_SECRET as string,
@@ -69,6 +101,7 @@ export const refreshAccessToken = catchAsync(
       userId: string;
       role: string;
     };
+
     const existingToken = await RefreshToken.findOne({
       token: refreshToken,
     });
@@ -76,9 +109,13 @@ export const refreshAccessToken = catchAsync(
     if (!existingToken) {
       throw new AppError("Invalid refresh token", 401);
     }
+
+    // DELETE OLD TOKEN
     await RefreshToken.deleteOne({
       token: refreshToken,
     });
+
+    // CREATE NEW ACCESS TOKEN
     const newAccessToken = jwt.sign(
       {
         userId: decoded.userId,
@@ -89,6 +126,8 @@ export const refreshAccessToken = catchAsync(
         expiresIn: "15m",
       },
     );
+
+    // CREATE NEW REFRESH TOKEN
     const newRefreshToken = jwt.sign(
       {
         userId: decoded.userId,
@@ -99,23 +138,26 @@ export const refreshAccessToken = catchAsync(
         expiresIn: "7d",
       },
     );
+
+    // SAVE NEW REFRESH TOKEN
     await RefreshToken.create({
       user: decoded.userId,
       token: newRefreshToken,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // after 7 days
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     });
+
+    // ACCESS TOKEN COOKIE
     res.cookie("accessToken", newAccessToken, {
-      httpOnly: true,
-      secure: false,
-      sameSite: "lax",
-      maxAge: 15 * 60 * 1000, // after 15 minutes
+      ...cookieOptions,
+      maxAge: 15 * 60 * 1000,
     });
+
+    // REFRESH TOKEN COOKIE
     res.cookie("refreshToken", newRefreshToken, {
-      httpOnly: true,
-      secure: false,
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // after 7 days
+      ...cookieOptions,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
+
     res.status(200).json({
       success: true,
       message: "Access token refreshed",
@@ -123,23 +165,38 @@ export const refreshAccessToken = catchAsync(
   },
 );
 
+/* =========================
+   LOGOUT USER
+========================= */
+
 export const logoutUser = catchAsync(async (req: Request, res: Response) => {
   const refreshToken = req.cookies.refreshToken;
+
   if (refreshToken) {
     await RefreshToken.deleteOne({
       token: refreshToken,
     });
   }
-  res.clearCookie("accessToken");
-  res.clearCookie("refreshToken");
+
+  res.clearCookie("accessToken", cookieOptions);
+
+  res.clearCookie("refreshToken", cookieOptions);
+
   res.status(200).json({
     success: true,
     message: "Logged out successfully",
   });
 });
 
+/* =========================
+   GET PROFILE
+========================= */
+
 export const getProfile = catchAsync(async (req: any, res: Response) => {
-  const result = await getProfileService({ userId: req.user.userId });
+  const result = await getProfileService({
+    userId: req.user.userId,
+  });
+
   res.status(200).json({
     success: true,
     message: "User profile",
