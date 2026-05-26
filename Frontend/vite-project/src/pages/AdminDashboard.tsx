@@ -46,8 +46,6 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const usersPerPage = 5;
   const [loading, setLoading] = useState(true);
   const [transactionFilter, setTransactionFilter] = useState("all");
   const [fromDate, setFromDate] = useState("");
@@ -724,21 +722,6 @@ const AdminDashboard = () => {
             >
               View Transactions
             </button>
-
-            {/* <button
-              onClick={() => setActiveSection("analytics")}
-              className="
-          w-full
-          bg-white/5
-          hover:bg-white/10
-          border border-white/10
-          py-4
-          rounded-2xl
-          transition
-        "
-            >
-              Banking Analytics
-            </button> */}
 
             <button
               className="
