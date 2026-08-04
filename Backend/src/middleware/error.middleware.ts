@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from "express";
+import { ZodError } from "zod";
 
 const globalErrorHandler = (
   err: any,
@@ -11,6 +12,13 @@ const globalErrorHandler = (
   let statusCode = err.statusCode || 500;
 
   let message = err.message || "Internal Server Error";
+
+  // ZOD VALIDATION ERROR
+  if (err instanceof ZodError) {
+    message = err.issues.map((issue) => issue.message).join(", ");
+
+    statusCode = 400;
+  }
 
   // MONGOOSE VALIDATION ERROR
   if (err.name === "ValidationError") {

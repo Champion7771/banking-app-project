@@ -19,6 +19,18 @@ interface AuthState {
   isLoadingUser: boolean;
 }
 
+interface ErrorResponse {
+  response?: { data?: { message?: string } };
+}
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (typeof error === "object" && error !== null && "response" in error) {
+    return (error as ErrorResponse).response?.data?.message || fallback;
+  }
+
+  return fallback;
+};
+
 const initialState: AuthState = {
   user: null,
   isAuthenticated: false,
@@ -47,10 +59,8 @@ export const loginUser = createAsyncThunk(
       const response = await api.get("/auth/profile");
 
       return response.data.data;
-    } catch (error: any) {
-      return thunkAPI.rejectWithValue(
-        error.response?.data?.message || "Login failed",
-      );
+    } catch (error: unknown) {
+      return thunkAPI.rejectWithValue(getErrorMessage(error, "Login failed"));
     }
   },
 );
@@ -72,9 +82,9 @@ export const registerUser = createAsyncThunk(
       const response = await api.post("/auth/register", data);
 
       return response.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       return thunkAPI.rejectWithValue(
-        error.response?.data?.message || "Registration failed",
+        getErrorMessage(error, "Registration failed"),
       );
     }
   },
@@ -89,9 +99,9 @@ export const loadUser = createAsyncThunk(
       const response = await api.get("/auth/profile");
 
       return response.data.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       return thunkAPI.rejectWithValue(
-        error.response?.data?.message || "Failed to load user",
+        getErrorMessage(error, "Failed to load user"),
       );
     }
   },
@@ -129,12 +139,18 @@ const authSlice = createSlice({
       state.isAuthenticated = true;
     });
 
-    builder.addCase(loginUser.rejected, (state, action: any) => {
+    builder.addCase(loginUser.rejected, (state, action: PayloadAction<unknown>) => {
       state.loading = false;
-      if (Array.isArray(action.payload)) {
-        state.error = action.payload.map((err: any) => err.message).join(", ");
+      const payload = action.payload;
+      if (Array.isArray(payload)) {
+        state.error = payload
+          .map((err: { message?: string }) => err.message || "")
+          .filter(Boolean)
+          .join(", ");
+      } else if (typeof payload === "string") {
+        state.error = payload;
       } else {
-        state.error = action.payload;
+        state.error = getErrorMessage(payload, "Login failed");
       }
     });
 
@@ -148,13 +164,19 @@ const authSlice = createSlice({
       state.loading = false;
     });
 
-    builder.addCase(registerUser.rejected, (state, action: any) => {
+    builder.addCase(registerUser.rejected, (state, action: PayloadAction<unknown>) => {
       state.loading = false;
       // HANDLE ARRAY ERRORS
-      if (Array.isArray(action.payload)) {
-        state.error = action.payload.map((err: any) => err.message).join(", ");
+      const payload = action.payload;
+      if (Array.isArray(payload)) {
+        state.error = payload
+          .map((err: { message?: string }) => err.message || "")
+          .filter(Boolean)
+          .join(", ");
+      } else if (typeof payload === "string") {
+        state.error = payload;
       } else {
-        state.error = action.payload;
+        state.error = getErrorMessage(payload, "Registration failed");
       }
     });
 
