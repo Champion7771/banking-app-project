@@ -13,8 +13,20 @@ const globalErrorHandler = (
 
   let message = err.message || "Internal Server Error";
 
+  let errors: Record<string, string> | undefined;
+
   // ZOD VALIDATION ERROR
   if (err instanceof ZodError) {
+    errors = {};
+
+    err.issues.forEach((issue) => {
+      const field = String(issue.path[0]);
+
+      if (!errors![field]) {
+        errors![field] = issue.message;
+      }
+    });
+
     message = err.issues.map((issue) => issue.message).join(", ");
 
     statusCode = 400;
@@ -46,6 +58,7 @@ const globalErrorHandler = (
   res.status(statusCode).json({
     success: false,
     message,
+    ...(errors && { errors }),
   });
 };
 
