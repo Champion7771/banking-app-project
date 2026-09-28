@@ -11,24 +11,47 @@ interface User {
   balance: number;
 }
 
+interface FieldErrors {
+  [field: string]: string;
+}
+
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   loading: boolean;
   error: string | null;
+  fieldErrors: FieldErrors | null;
   isLoadingUser: boolean;
 }
 
 interface ErrorResponse {
-  response?: { data?: { message?: string } };
+  response?: {
+    data?: {
+      message?: string;
+      errors?: FieldErrors;
+    };
+  };
 }
 
-const getErrorMessage = (error: unknown, fallback: string) => {
+interface RejectPayload {
+  message: string;
+  fieldErrors: FieldErrors | null;
+}
+
+const buildRejectPayload = (
+  error: unknown,
+  fallback: string,
+): RejectPayload => {
   if (typeof error === "object" && error !== null && "response" in error) {
-    return (error as ErrorResponse).response?.data?.message || fallback;
+    const data = (error as ErrorResponse).response?.data;
+
+    return {
+      message: data?.message || fallback,
+      fieldErrors: data?.errors || null,
+    };
   }
 
-  return fallback;
+  return { message: fallback, fieldErrors: null };
 };
 
 const initialState: AuthState = {
@@ -36,6 +59,7 @@ const initialState: AuthState = {
   isAuthenticated: false,
   loading: false,
   error: null,
+  fieldErrors: null,
   isLoadingUser: true,
 };
 
@@ -52,15 +76,15 @@ export const loginUser = createAsyncThunk(
     thunkAPI,
   ) => {
     try {
-      // LOGIN
       await api.post("/auth/login", data);
 
-      // FETCH PROFILE
       const response = await api.get("/auth/profile");
 
       return response.data.data;
     } catch (error: unknown) {
-      return thunkAPI.rejectWithValue(getErrorMessage(error, "Login failed"));
+      return thunkAPI.rejectWithValue(
+        buildRejectPayload(error, "Login failed"),
+      );
     }
   },
 );
@@ -84,7 +108,7 @@ export const registerUser = createAsyncThunk(
       return response.data;
     } catch (error: unknown) {
       return thunkAPI.rejectWithValue(
-        getErrorMessage(error, "Registration failed"),
+        buildRejectPayload(error, "Registration failed"),
       );
     }
   },
@@ -95,18 +119,38 @@ export const loadUser = createAsyncThunk(
   "auth/loadUser",
 
   async (_, thunkAPI) => {
-    try {
-      const response = await api.get("/auth/profile");
+    const MAX_ATTEMPTS = 5;
 
-      return response.data.data;
-    } catch (error: unknown) {
-      return thunkAPI.rejectWithValue(
-        getErrorMessage(error, "Failed to load user"),
-      );
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const response = await api.get("/auth/profile");
+
+        return response.data.data;
+      } catch (error: unknown) {
+        const status = (error as { response?: { status?: number } })?.response
+          ?.status;
+
+        // The server answered (e.g. 401 = not logged in): stop, don't retry.
+        const serverAnswered =
+          status !== undefined && ![502, 503, 504].includes(status);
+
+        if (serverAnswered || attempt === MAX_ATTEMPTS) {
+          return thunkAPI.rejectWithValue(
+            buildRejectPayload(error, "Failed to load user"),
+          );
+        }
+
+        // No response, timeout, or 502/503/504: Render is still waking up.
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+      }
     }
+
+    return thunkAPI.rejectWithValue({
+      message: "Failed to load user",
+      fieldErrors: null,
+    });
   },
 );
-
 const authSlice = createSlice({
   name: "auth",
 
@@ -115,14 +159,17 @@ const authSlice = createSlice({
   reducers: {
     setUser: (state, action: PayloadAction<User>) => {
       state.user = action.payload;
-
       state.isAuthenticated = true;
     },
 
     logout: (state) => {
       state.user = null;
-
       state.isAuthenticated = false;
+    },
+
+    clearAuthErrors: (state) => {
+      state.error = null;
+      state.fieldErrors = null;
     },
   },
 
@@ -131,6 +178,7 @@ const authSlice = createSlice({
     builder.addCase(loginUser.pending, (state) => {
       state.loading = true;
       state.error = null;
+      state.fieldErrors = null;
     });
 
     builder.addCase(loginUser.fulfilled, (state, action) => {
@@ -139,46 +187,36 @@ const authSlice = createSlice({
       state.isAuthenticated = true;
     });
 
-    builder.addCase(loginUser.rejected, (state, action: PayloadAction<unknown>) => {
-      state.loading = false;
-      const payload = action.payload;
-      if (Array.isArray(payload)) {
-        state.error = payload
-          .map((err: { message?: string }) => err.message || "")
-          .filter(Boolean)
-          .join(", ");
-      } else if (typeof payload === "string") {
-        state.error = payload;
-      } else {
-        state.error = getErrorMessage(payload, "Login failed");
-      }
-    });
+    builder.addCase(
+      loginUser.rejected,
+      (state, action: PayloadAction<unknown>) => {
+        state.loading = false;
+        const payload = action.payload as RejectPayload | undefined;
+        state.error = payload?.message || "Login failed";
+        state.fieldErrors = payload?.fieldErrors || null;
+      },
+    );
 
     // REGISTER
     builder.addCase(registerUser.pending, (state) => {
       state.loading = true;
       state.error = null;
+      state.fieldErrors = null;
     });
 
     builder.addCase(registerUser.fulfilled, (state) => {
       state.loading = false;
     });
 
-    builder.addCase(registerUser.rejected, (state, action: PayloadAction<unknown>) => {
-      state.loading = false;
-      // HANDLE ARRAY ERRORS
-      const payload = action.payload;
-      if (Array.isArray(payload)) {
-        state.error = payload
-          .map((err: { message?: string }) => err.message || "")
-          .filter(Boolean)
-          .join(", ");
-      } else if (typeof payload === "string") {
-        state.error = payload;
-      } else {
-        state.error = getErrorMessage(payload, "Registration failed");
-      }
-    });
+    builder.addCase(
+      registerUser.rejected,
+      (state, action: PayloadAction<unknown>) => {
+        state.loading = false;
+        const payload = action.payload as RejectPayload | undefined;
+        state.error = payload?.message || "Registration failed";
+        state.fieldErrors = payload?.fieldErrors || null;
+      },
+    );
 
     // LOAD USER
     builder.addCase(loadUser.pending, (state) => {
@@ -199,6 +237,6 @@ const authSlice = createSlice({
   },
 });
 
-export const { setUser, logout } = authSlice.actions;
+export const { setUser, logout, clearAuthErrors } = authSlice.actions;
 
 export default authSlice.reducer;
