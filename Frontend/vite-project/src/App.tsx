@@ -40,6 +40,24 @@ const AppContent = () => {
   useEffect(() => {
     dispatch(loadUser());
   }, [dispatch]);
+  // LOADING SCREEN
+  if (isLoadingUser) {
+    return (
+      <div
+        className="
+          min-h-screen
+          bg-[#0f172a]
+          text-white
+          flex
+          items-center
+          justify-center
+          text-2xl
+        "
+      >
+        Loading...
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#0f172a] text-white">

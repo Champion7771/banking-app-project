@@ -12,9 +12,7 @@ const Login = () => {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const { loading, error, fieldErrors } = useSelector(
-    (state: RootState) => state.auth,
-  );
+  const { loading, error } = useSelector((state: RootState) => state.auth);
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -56,38 +54,22 @@ const Login = () => {
 
         {/* FORM */}
         <form onSubmit={handleLogin} className="space-y-5">
-          <div>
-            <Input
-              type="email"
-              placeholder="Enter your email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
+          <Input
+            type="email"
+            placeholder="Enter your email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
 
-            {fieldErrors?.email && (
-              <p className="text-red-400 text-sm mt-1">{fieldErrors.email}</p>
-            )}
-          </div>
+          <Input
+            type="password"
+            placeholder="Enter your password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
 
-          <div>
-            <Input
-              type="password"
-              placeholder="Enter your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-
-            {fieldErrors?.password && (
-              <p className="text-red-400 text-sm mt-1">
-                {fieldErrors.password}
-              </p>
-            )}
-          </div>
-
-          {/* GENERAL ERROR (e.g. wrong credentials, network failure) */}
-          {!fieldErrors && error && (
-            <p className="text-red-400 text-sm">{error}</p>
-          )}
+          {/* ERROR */}
+          {error && <p className="text-red-400 text-sm">{error}</p>}
 
           {/* BUTTON */}
           <Button type="submit" disabled={loading} className="w-full">
@@ -97,7 +79,7 @@ const Login = () => {
 
         {/* FOOTER */}
         <div className="mt-8 text-center text-zinc-400">
-          Don't have an account?{" "}
+          Don’t have an account?{" "}
           <Link to="/register" className="text-emerald-400 hover:underline">
             Register
           </Link>

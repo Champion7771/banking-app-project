@@ -6,7 +6,6 @@ const api = axios.create({
     "https://banking-app-project.onrender.com/api",
 
   withCredentials: true,
-  timeout: 20000,
 });
 
 api.interceptors.response.use(
